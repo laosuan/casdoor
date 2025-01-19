@@ -17,6 +17,7 @@ package object
 import (
 	"fmt"
 
+	"github.com/casdoor/casdoor/i18n"
 	"github.com/casdoor/casdoor/util"
 	"github.com/xorm-io/core"
 )
@@ -28,7 +29,8 @@ type Invitation struct {
 	UpdatedTime string `xorm:"varchar(100)" json:"updatedTime"`
 	DisplayName string `xorm:"varchar(100)" json:"displayName"`
 
-	Code      string `xorm:"varchar(100)" json:"code"`
+	Code      string `xorm:"varchar(100) index" json:"code"`
+	IsRegexp  bool   `json:"isRegexp"`
 	Quota     int    `json:"quota"`
 	UsedCount int    `json:"usedCount"`
 
@@ -38,6 +40,7 @@ type Invitation struct {
 	Phone       string `xorm:"varchar(100)" json:"phone"`
 
 	SignupGroup string `xorm:"varchar(100)" json:"signupGroup"`
+	DefaultCode string `xorm:"varchar(100)" json:"defaultCode"`
 
 	State string `xorm:"varchar(100)" json:"state"`
 }
@@ -91,12 +94,61 @@ func GetInvitation(id string) (*Invitation, error) {
 	return getInvitation(owner, name)
 }
 
-func UpdateInvitation(id string, invitation *Invitation) (bool, error) {
+func GetInvitationByCode(code string, organizationName string, lang string) (*Invitation, string) {
+	invitations, err := GetInvitations(organizationName)
+	if err != nil {
+		return nil, err.Error()
+	}
+	errMsg := ""
+	for _, invitation := range invitations {
+		if isValid, msg := invitation.SimpleCheckInvitationCode(code, lang); isValid {
+			return invitation, msg
+		} else if msg != "" && errMsg == "" {
+			errMsg = msg
+		}
+	}
+
+	if errMsg != "" {
+		return nil, errMsg
+	} else {
+		return nil, i18n.Translate(lang, "check:Invitation code is invalid")
+	}
+}
+
+func GetMaskedInvitation(invitation *Invitation) *Invitation {
+	if invitation == nil {
+		return nil
+	}
+
+	invitation.CreatedTime = ""
+	invitation.UpdatedTime = ""
+	invitation.Code = "***"
+	invitation.DefaultCode = "***"
+	invitation.IsRegexp = false
+	invitation.Quota = -1
+	invitation.UsedCount = -1
+	invitation.SignupGroup = ""
+
+	return invitation
+}
+
+func UpdateInvitation(id string, invitation *Invitation, lang string) (bool, error) {
 	owner, name := util.GetOwnerAndNameFromId(id)
 	if p, err := getInvitation(owner, name); err != nil {
 		return false, err
 	} else if p == nil {
 		return false, nil
+	}
+
+	if isRegexp, err := util.IsRegexp(invitation.Code); err != nil {
+		return false, err
+	} else {
+		invitation.IsRegexp = isRegexp
+	}
+
+	err := CheckInvitationDefaultCode(invitation.Code, invitation.DefaultCode, lang)
+	if err != nil {
+		return false, err
 	}
 
 	affected, err := ormer.Engine.ID(core.PK{owner, name}).AllCols().Update(invitation)
@@ -107,7 +159,18 @@ func UpdateInvitation(id string, invitation *Invitation) (bool, error) {
 	return affected != 0, nil
 }
 
-func AddInvitation(invitation *Invitation) (bool, error) {
+func AddInvitation(invitation *Invitation, lang string) (bool, error) {
+	if isRegexp, err := util.IsRegexp(invitation.Code); err != nil {
+		return false, err
+	} else {
+		invitation.IsRegexp = isRegexp
+	}
+
+	err := CheckInvitationDefaultCode(invitation.Code, invitation.DefaultCode, lang)
+	if err != nil {
+		return false, err
+	}
+
 	affected, err := ormer.Engine.Insert(invitation)
 	if err != nil {
 		return false, err
@@ -131,4 +194,44 @@ func (invitation *Invitation) GetId() string {
 
 func VerifyInvitation(id string) (payment *Payment, attachInfo map[string]interface{}, err error) {
 	return nil, nil, fmt.Errorf("the invitation: %s does not exist", id)
+}
+
+func (invitation *Invitation) SimpleCheckInvitationCode(invitationCode string, lang string) (bool, string) {
+	if matched, err := util.IsInvitationCodeMatch(invitation.Code, invitationCode); err != nil {
+		return false, err.Error()
+	} else if !matched {
+		return false, ""
+	}
+
+	if invitation.State != "Active" {
+		return false, i18n.Translate(lang, "check:Invitation code suspended")
+	}
+	if invitation.UsedCount >= invitation.Quota {
+		return false, i18n.Translate(lang, "check:Invitation code exhausted")
+	}
+
+	// Determine whether the invitation code is in the form of a regular expression other than pure numbers and letters
+	if invitation.IsRegexp {
+		user, _ := GetUserByInvitationCode(invitation.Owner, invitationCode)
+		if user != nil {
+			return false, i18n.Translate(lang, "check:The invitation code has already been used")
+		}
+	}
+	return true, ""
+}
+
+func (invitation *Invitation) IsInvitationCodeValid(application *Application, invitationCode string, username string, email string, phone string, lang string) (bool, string) {
+	if isValid, msg := invitation.SimpleCheckInvitationCode(invitationCode, lang); !isValid {
+		return false, msg
+	}
+	if application.IsSignupItemRequired("Username") && invitation.Username != "" && invitation.Username != username {
+		return false, i18n.Translate(lang, "check:Please register using the username corresponding to the invitation code")
+	}
+	if application.IsSignupItemRequired("Email") && invitation.Email != "" && invitation.Email != email {
+		return false, i18n.Translate(lang, "check:Please register using the email corresponding to the invitation code")
+	}
+	if application.IsSignupItemRequired("Phone") && invitation.Phone != "" && invitation.Phone != phone {
+		return false, i18n.Translate(lang, "check:Please register using the phone  corresponding to the invitation code")
+	}
+	return true, ""
 }

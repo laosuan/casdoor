@@ -13,7 +13,7 @@
   <a href="https://github.com/casdoor/casdoor/releases/latest">
     <img alt="GitHub Release" src="https://img.shields.io/github/v/release/casdoor/casdoor.svg">
   </a>
-  <a href="https://hub.docker.com/repository/docker/casbin/casdoor">
+  <a href="https://hub.docker.com/r/casbin/casdoor">
     <img alt="Docker Image Version (latest semver)" src="https://img.shields.io/badge/Docker%20Hub-latest-brightgreen">
   </a>
 </p>
@@ -69,6 +69,7 @@ https://casdoor.org
 
 - By source code: https://casdoor.org/docs/basic/server-installation
 - By Docker: https://casdoor.org/docs/basic/try-with-docker
+- By Kubernetes Helm: https://casdoor.org/docs/basic/try-with-helm
 
 ## How to connect to Casdoor?
 
@@ -86,8 +87,7 @@ https://casdoor.org/docs/category/integrations
 ## How to contact?
 
 - Discord: https://discord.gg/5rPsrAzK7S
-- Forum: https://forum.casbin.com
-- Contact: https://tawk.to/chat/623352fea34c2456412b8c51/1fuc7od6e
+- Contact: https://casdoor.org/help
 
 ## Contribute
 

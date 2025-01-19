@@ -52,18 +52,21 @@ func GetFailedSigninConfigByUser(user *User) (int, int, error) {
 	if err != nil {
 		return 0, 0, err
 	}
-	failedSigninLimit := application.FailedSigninLimit
-	failedSigninfrozenTime := application.FailedSigninfrozenTime
+	if application == nil {
+		return 0, 0, fmt.Errorf("the application for user %s is not found", user.GetId())
+	}
 
-	// 0 as an initialization value, corresponding to the default configuration parameters
+	failedSigninLimit := application.FailedSigninLimit
 	if failedSigninLimit == 0 {
 		failedSigninLimit = DefaultFailedSigninLimit
 	}
-	if failedSigninfrozenTime == 0 {
-		failedSigninfrozenTime = DefaultFailedSigninfrozenTime
+
+	failedSigninFrozenTime := application.FailedSigninFrozenTime
+	if failedSigninFrozenTime == 0 {
+		failedSigninFrozenTime = DefaultFailedSigninFrozenTime
 	}
 
-	return failedSigninLimit, failedSigninfrozenTime, nil
+	return failedSigninLimit, failedSigninFrozenTime, nil
 }
 
 func recordSigninErrorInfo(user *User, lang string, options ...bool) error {
@@ -72,7 +75,7 @@ func recordSigninErrorInfo(user *User, lang string, options ...bool) error {
 		enableCaptcha = options[0]
 	}
 
-	failedSigninLimit, failedSigninfrozenTime, errSignin := GetFailedSigninConfigByUser(user)
+	failedSigninLimit, failedSigninFrozenTime, errSignin := GetFailedSigninConfigByUser(user)
 	if errSignin != nil {
 		return errSignin
 	}
@@ -101,5 +104,5 @@ func recordSigninErrorInfo(user *User, lang string, options ...bool) error {
 	}
 
 	// don't show the chance error message if the user has no chance left
-	return fmt.Errorf(i18n.Translate(lang, "check:You have entered the wrong password or code too many times, please wait for %d minutes and try again"), failedSigninfrozenTime)
+	return fmt.Errorf(i18n.Translate(lang, "check:You have entered the wrong password or code too many times, please wait for %d minutes and try again"), failedSigninFrozenTime)
 }

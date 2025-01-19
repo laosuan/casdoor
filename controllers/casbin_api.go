@@ -24,7 +24,7 @@ import (
 
 // Enforce
 // @Title Enforce
-// @Tag Enforce API
+// @Tag Enforcer API
 // @Description Call Casbin Enforce API
 // @Param   body    body   []string  true   "Casbin request"
 // @Param   permissionId    query   string  false   "permission id"
@@ -85,7 +85,7 @@ func (c *ApiController) Enforce() {
 			return
 		}
 		if permission == nil {
-			c.ResponseError(fmt.Sprintf("permission: %s doesn't exist", permissionId))
+			c.ResponseError(fmt.Sprintf(c.T("permission:The permission: \"%s\" doesn't exist"), permissionId))
 			return
 		}
 
@@ -121,6 +121,10 @@ func (c *ApiController) Enforce() {
 		}
 	} else if owner != "" {
 		permissions, err = object.GetPermissions(owner)
+		if err != nil {
+			c.ResponseError(err.Error())
+			return
+		}
 	} else {
 		c.ResponseError(c.T("general:Missing parameter"))
 		return
@@ -151,7 +155,7 @@ func (c *ApiController) Enforce() {
 
 // BatchEnforce
 // @Title BatchEnforce
-// @Tag Enforce API
+// @Tag Enforcer API
 // @Description Call Casbin BatchEnforce API
 // @Param   body    body   []string  true   "array of casbin requests"
 // @Param   permissionId    query   string  false   "permission id"
@@ -205,7 +209,7 @@ func (c *ApiController) BatchEnforce() {
 			return
 		}
 		if permission == nil {
-			c.ResponseError(fmt.Sprintf("permission: %s doesn't exist", permissionId))
+			c.ResponseError(fmt.Sprintf(c.T("permission:The permission: \"%s\" doesn't exist"), permissionId))
 			return
 		}
 
@@ -235,6 +239,10 @@ func (c *ApiController) BatchEnforce() {
 		}
 	} else if owner != "" {
 		permissions, err = object.GetPermissions(owner)
+		if err != nil {
+			c.ResponseError(err.Error())
+			return
+		}
 	} else {
 		c.ResponseError(c.T("general:Missing parameter"))
 		return
@@ -264,10 +272,13 @@ func (c *ApiController) BatchEnforce() {
 }
 
 func (c *ApiController) GetAllObjects() {
-	userId := c.GetSessionUsername()
+	userId := c.Input().Get("userId")
 	if userId == "" {
-		c.ResponseError(c.T("general:Please login first"))
-		return
+		userId = c.GetSessionUsername()
+		if userId == "" {
+			c.ResponseError(c.T("general:Please login first"))
+			return
+		}
 	}
 
 	objects, err := object.GetAllObjects(userId)
@@ -280,10 +291,13 @@ func (c *ApiController) GetAllObjects() {
 }
 
 func (c *ApiController) GetAllActions() {
-	userId := c.GetSessionUsername()
+	userId := c.Input().Get("userId")
 	if userId == "" {
-		c.ResponseError(c.T("general:Please login first"))
-		return
+		userId = c.GetSessionUsername()
+		if userId == "" {
+			c.ResponseError(c.T("general:Please login first"))
+			return
+		}
 	}
 
 	actions, err := object.GetAllActions(userId)
@@ -296,10 +310,13 @@ func (c *ApiController) GetAllActions() {
 }
 
 func (c *ApiController) GetAllRoles() {
-	userId := c.GetSessionUsername()
+	userId := c.Input().Get("userId")
 	if userId == "" {
-		c.ResponseError(c.T("general:Please login first"))
-		return
+		userId = c.GetSessionUsername()
+		if userId == "" {
+			c.ResponseError(c.T("general:Please login first"))
+			return
+		}
 	}
 
 	roles, err := object.GetAllRoles(userId)

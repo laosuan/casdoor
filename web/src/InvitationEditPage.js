@@ -19,6 +19,8 @@ import * as OrganizationBackend from "./backend/OrganizationBackend";
 import * as ApplicationBackend from "./backend/ApplicationBackend";
 import * as Setting from "./Setting";
 import i18next from "i18next";
+import copy from "copy-to-clipboard";
+import * as GroupBackend from "./backend/GroupBackend";
 
 const {Option} = Select;
 
@@ -32,6 +34,7 @@ class InvitationEditPage extends React.Component {
       invitation: null,
       organizations: [],
       applications: [],
+      groups: [],
       mode: props.location.mode !== undefined ? props.location.mode : "edit",
     };
   }
@@ -40,6 +43,7 @@ class InvitationEditPage extends React.Component {
     this.getInvitation();
     this.getOrganizations();
     this.getApplicationsByOrganization(this.state.organizationName);
+    this.getGroupsByOrganization(this.state.organizationName);
   }
 
   getInvitation() {
@@ -74,6 +78,17 @@ class InvitationEditPage extends React.Component {
       });
   }
 
+  getGroupsByOrganization(organizationName) {
+    GroupBackend.getGroups(organizationName)
+      .then((res) => {
+        if (res.status === "ok") {
+          this.setState({
+            groups: res.data,
+          });
+        }
+      });
+  }
+
   parseInvitationField(key, value) {
     if ([""].includes(key)) {
       value = Setting.myParseInt(value);
@@ -91,6 +106,22 @@ class InvitationEditPage extends React.Component {
     });
   }
 
+  copySignupLink() {
+    let defaultApplication;
+    if (this.state.invitation.owner === "built-in") {
+      defaultApplication = "app-built-in";
+    } else {
+      const selectedOrganization = Setting.getArrayItem(this.state.organizations, "name", this.state.invitation.owner);
+      defaultApplication = selectedOrganization.defaultApplication;
+      if (!defaultApplication) {
+        Setting.showMessage("error", i18next.t("invitation:You need to specify a default application for ") + selectedOrganization.name);
+        return;
+      }
+    }
+    copy(`${window.location.origin}/signup/${defaultApplication}?invitationCode=${this.state.invitation?.defaultCode}`);
+    Setting.showMessage("success", i18next.t("general:Copied to clipboard successfully"));
+  }
+
   renderInvitation() {
     const isCreatedByPlan = this.state.invitation.tag === "auto_created_invitation_for_plan";
     return (
@@ -99,6 +130,9 @@ class InvitationEditPage extends React.Component {
           {this.state.mode === "add" ? i18next.t("invitation:New Invitation") : i18next.t("invitation:Edit Invitation")}&nbsp;&nbsp;&nbsp;&nbsp;
           <Button onClick={() => this.submitInvitationEdit(false)}>{i18next.t("general:Save")}</Button>
           <Button style={{marginLeft: "20px"}} type="primary" onClick={() => this.submitInvitationEdit(true)}>{i18next.t("general:Save & Exit")}</Button>
+          <Button style={{marginLeft: "20px"}} onClick={_ => this.copySignupLink()}>
+            {i18next.t("application:Copy signup page URL")}
+          </Button>
           {this.state.mode === "add" ? <Button style={{marginLeft: "20px"}} onClick={() => this.deleteInvitation()}>{i18next.t("general:Cancel")}</Button> : null}
         </div>
       } style={(Setting.isMobile()) ? {margin: "5px"} : {}} type="inner">
@@ -107,7 +141,7 @@ class InvitationEditPage extends React.Component {
             {Setting.getLabel(i18next.t("general:Organization"), i18next.t("general:Organization - Tooltip"))} :
           </Col>
           <Col span={22} >
-            <Select virtual={false} style={{width: "100%"}} disabled={!Setting.isAdminUser(this.props.account) || isCreatedByPlan} value={this.state.invitation.owner} onChange={(value => {this.updateInvitationField("owner", value);})}>
+            <Select virtual={false} style={{width: "100%"}} disabled={!Setting.isAdminUser(this.props.account) || isCreatedByPlan} value={this.state.invitation.owner} onChange={(value => {this.updateInvitationField("owner", value); this.getApplicationsByOrganization(value);this.getGroupsByOrganization(value);})}>
               {
                 this.state.organizations.map((organization, index) => <Option key={index} value={organization.name}>{organization.name}</Option>)
               }
@@ -140,7 +174,21 @@ class InvitationEditPage extends React.Component {
           </Col>
           <Col span={22} >
             <Input value={this.state.invitation.code} onChange={e => {
+              const regex = /[^a-zA-Z0-9]/;
+              if (!regex.test(e.target.value)) {
+                this.updateInvitationField("defaultCode", e.target.value);
+              }
               this.updateInvitationField("code", e.target.value);
+            }} />
+          </Col>
+        </Row>
+        <Row style={{marginTop: "20px"}} >
+          <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
+            {Setting.getLabel(i18next.t("invitation:Default code"), i18next.t("invitation:Default code - Tooltip"))} :
+          </Col>
+          <Col span={22} >
+            <Input value={this.state.invitation.defaultCode} onChange={e => {
+              this.updateInvitationField("defaultCode", e.target.value);
             }} />
           </Col>
         </Row>
@@ -171,8 +219,25 @@ class InvitationEditPage extends React.Component {
           <Col span={22} >
             <Select virtual={false} style={{width: "100%"}} value={this.state.invitation.application}
               onChange={(value => {this.updateInvitationField("application", value);})}
-              options={this.state.applications.map((application) => Setting.getOption(application.name, application.name))
-              } />
+              options={[
+                {label: i18next.t("general:All"), value: "All"},
+                ...this.state.applications.map((application) => Setting.getOption(application.name, application.name)),
+              ]} />
+          </Col>
+        </Row>
+        <Row style={{marginTop: "20px"}} >
+          <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
+            {Setting.getLabel(i18next.t("provider:Signup group"), i18next.t("provider:Signup group - Tooltip"))} :
+          </Col>
+          <Col span={22} >
+            <Select virtual={false} style={{width: "100%"}} value={this.state.invitation.signupGroup} onChange={(value => {this.updateInvitationField("signupGroup", value);})}>
+              <Option key={""} value={""}>
+                {i18next.t("general:Default")}
+              </Option>
+              {
+                this.state.groups.map((group, index) => <Option key={index} value={`${group.owner}/${group.name}`}>{group.name}</Option>)
+              }
+            </Select>
           </Col>
         </Row>
         <Row style={{marginTop: "20px"}} >
@@ -272,6 +337,9 @@ class InvitationEditPage extends React.Component {
         <div style={{marginTop: "20px", marginLeft: "40px"}}>
           <Button size="large" onClick={() => this.submitInvitationEdit(false)}>{i18next.t("general:Save")}</Button>
           <Button style={{marginLeft: "20px"}} type="primary" size="large" onClick={() => this.submitInvitationEdit(true)}>{i18next.t("general:Save & Exit")}</Button>
+          <Button style={{marginLeft: "20px"}} size="large" onClick={_ => this.copySignupLink()}>
+            {i18next.t("application:Copy signup page URL")}
+          </Button>
           {this.state.mode === "add" ? <Button style={{marginLeft: "20px"}} size="large" onClick={() => this.deleteInvitation()}>{i18next.t("general:Cancel")}</Button> : null}
         </div>
       </div>
